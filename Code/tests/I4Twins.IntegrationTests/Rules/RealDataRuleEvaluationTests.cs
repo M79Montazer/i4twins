@@ -11,6 +11,20 @@ namespace I4Twins.IntegrationTests.Rules;
 
 public class RealDataRuleEvaluationTests(ITestOutputHelper output)
 {
+    private ProcessingPipeline CreatePipeline() => new(
+        new RuleSetService(
+            new FileRuleSource(TestData.DataFile("rules.json")),
+            new JsonRuleParser(),
+            RuleOperatorRegistry.WithDefaultOperators()),
+        new IngestionService(
+            new FileLineSource(TestData.DataFile("readings.jsonl")),
+            new JsonLineParser()),
+        new RuleEvaluationService(
+            new RuleEvaluator(RuleOperatorRegistry.WithDefaultOperators()),
+            RuleOperatorRegistry.WithDefaultOperators()),
+        new AlertService(),
+        new NoopStore());
+
     [Fact]
     public void RealRules_LoadAndValidate()
     {
@@ -32,17 +46,7 @@ public class RealDataRuleEvaluationTests(ITestOutputHelper output)
     [Fact]
     public void RealDataset_EvaluationIsInternallyConsistent_WithoutCrashing()
     {
-        var pipeline = new ProcessingPipeline(
-            new RuleSetService(
-                new FileRuleSource(TestData.DataFile("rules.json")),
-                new JsonRuleParser(),
-                RuleOperatorRegistry.WithDefaultOperators()),
-            new IngestionService(
-                new FileLineSource(TestData.DataFile("readings.jsonl")),
-                new JsonLineParser()),
-            new RuleEvaluationService(new RuleEvaluator(RuleOperatorRegistry.WithDefaultOperators()), RuleOperatorRegistry.WithDefaultOperators()),
-            new AlertService(),
-            new NoopStore());
+        var pipeline = CreatePipeline();
 
         var outcome = pipeline.Run();
         var ingestion = outcome.Ingestion;
@@ -105,5 +109,26 @@ public class RealDataRuleEvaluationTests(ITestOutputHelper output)
         Assert.Equal("temperature", raisedAlert.Metric);
         Assert.Equal(70.112, raisedAlert.PeakValue, precision: 3);
         Assert.Contains(outcome.AlertDecisions, d => !d.Raised && d.Episode.Qualifies);
+    }
+
+    [Fact]
+    public void RealDataset_ProducesTheCompleteProcessingReport()
+    {
+        var outcome = CreatePipeline().Run();
+        var report = ProcessingReport.Format(outcome);
+        output.WriteLine(report);
+
+        var requiredMetrics = new[]
+        {
+            "Total lines read:", "Parsed readings:", "Stored readings:", "Duplicates removed:",
+            "Invalid records rejected:", "Rules loaded:", "Rule evaluations performed:",
+            "Acceptable readings:", "Unacceptable readings:", "Rule violations:", "Alerts generated:",
+        };
+        Assert.All(requiredMetrics, label => Assert.Contains(label, report));
+
+        Assert.Contains("Episodes detected:          4 (qualifying: 2)", report);
+        Assert.Contains("Alerts generated:           1 (suppressed by cooldown: 1)", report);
+        Assert.Contains("Total lines read:           2150", report);
+        Assert.Contains("Stored readings:            2103", report);
     }
 }

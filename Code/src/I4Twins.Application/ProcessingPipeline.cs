@@ -22,15 +22,18 @@ public sealed class ProcessingPipeline(
     IngestionService ingestion,
     RuleEvaluationService evaluation,
     AlertService alerting,
-    IProcessingStore store)
+    IProcessingStore store,
+    IProcessingLog? log = null)
 {
     public ProcessingOutcome Run()
     {
         var rules = ruleSet.Load();
+        log?.Information($"loaded {rules.RulesLoaded} rules from configuration");
         var ingested = ingestion.Run();
         var evaluated = evaluation.Evaluate(ingested.Readings, rules.RuleSet);
         var alerted = alerting.Evaluate(evaluated.Episodes);
         var persisted = store.Persist(new ProcessingBatch(evaluated.Evaluations, evaluated.Episodes, alerted.Alerts));
+        log?.Information($"persisted {persisted.NewRows} new rows");
         return new ProcessingOutcome(
             ingested.Counters,
             rules.RulesLoaded,

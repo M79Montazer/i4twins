@@ -8,7 +8,7 @@ public sealed record RuleEvaluationOutcome(
     IReadOnlyList<ReadingEvaluation> Evaluations,
     IReadOnlyList<RuleEpisode> Episodes);
 
-public sealed class RuleEvaluationService(RuleEvaluator evaluator, RuleOperatorRegistry operators)
+public sealed class RuleEvaluationService(RuleEvaluator evaluator, RuleOperatorRegistry operators, IProcessingLog? log = null)
 {
     public RuleEvaluationOutcome Evaluate(IReadOnlyList<SensorReading> readings, RuleSet rules)
     {
@@ -40,6 +40,13 @@ public sealed class RuleEvaluationService(RuleEvaluator evaluator, RuleOperatorR
 
                 var result = stateful.EvaluateStream(stream.Key.DeviceId, stream.Key.Metric, streamReadings, rule);
                 episodes.AddRange(result.Episodes);
+                foreach (var episode in result.Episodes)
+                {
+                    log?.Warning(
+                        $"rule {episode.RuleId} violated: {episode.DeviceId}/{episode.Metric} above threshold " +
+                        $"from {episode.StartTs:u} to {episode.EndTs:u}, peak {episode.PeakValue}, " +
+                        $"qualifies: {episode.Qualifies}");
+                }
                 foreach (var reading in streamReadings)
                 {
                     var candidate = mutable[indexByReading[reading.Key]];

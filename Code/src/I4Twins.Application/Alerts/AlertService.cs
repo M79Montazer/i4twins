@@ -7,9 +7,13 @@ public sealed record AlertOutcome(
     IReadOnlyList<AlertDecision> Decisions,
     AlertCounterSnapshot Counters);
 
-public sealed class AlertService(CooldownPolicy policy)
+public sealed class AlertService(CooldownPolicy policy, IProcessingLog? log = null)
 {
     public AlertService() : this(new CooldownPolicy())
+    {
+    }
+
+    public AlertService(CooldownPolicy policy) : this(policy, null)
     {
     }
 
@@ -41,10 +45,16 @@ public sealed class AlertService(CooldownPolicy policy)
                     episode.RuleId, episode.DeviceId, episode.Metric, episode.StartTs, episode.EndTs, episode.PeakValue));
                 lastAlertEndByStream[key] = episode.EndTs;
                 counters.CountRaised();
+                log?.Information(
+                    $"alert raised for {episode.RuleId}/{episode.DeviceId}/{episode.Metric}: " +
+                    $"sustained from {episode.StartTs:u} to {episode.EndTs:u}, peak {episode.PeakValue}");
             }
             else
             {
                 counters.CountSuppressed();
+                log?.Information(
+                    $"alert suppressed for {episode.RuleId}/{episode.DeviceId}/{episode.Metric}: episode starts " +
+                    $"{episode.StartTs:u}, within cooldown after previous alert ending {previousAlertEnd:u}");
             }
 
             decisions.Add(new AlertDecision(episode, raised, previousAlertEnd));
