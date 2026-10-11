@@ -11,7 +11,11 @@ public sealed class RuleSet(IReadOnlyList<RuleDefinition> rules)
     public IReadOnlyList<RuleDefinition> Rules { get; } = rules;
 
     public IEnumerable<RuleDefinition> ApplicableRules(SensorReading reading) =>
-        _byMetric.TryGetValue(reading.Metric, out var candidates)
-            ? candidates.Where(rule => rule.AppliesTo(reading))
+        ApplicableRules(reading.DeviceId, reading.Metric);
+
+    public IEnumerable<RuleDefinition> ApplicableRules(string deviceId, string metric) =>
+        _byMetric.TryGetValue(metric, out var candidates)
+            ? candidates.Where(rule => rule.Enabled
+                && (rule.DeviceId is null || rule.DeviceId == deviceId))
             : [];
 }

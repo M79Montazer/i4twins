@@ -1,8 +1,6 @@
-using System.Globalization;
 using I4Twins.Domain.Readings;
 
 namespace I4Twins.Domain.Rules.Operators;
-
 
 public sealed class BetweenOperator : IStatelessRuleOperator
 {
@@ -33,9 +31,7 @@ public sealed class BetweenOperator : IStatelessRuleOperator
         var min = rule.Min!.Value;
         var max = rule.Max!.Value;
         return reading.Value < min || reading.Value > max
-            ? $"{reading.Metric} {Format(reading.Value)} is outside the range [{Format(min)}, {Format(max)}]"
+            ? $"{reading.Metric} {NumberText.Of(reading.Value)} is outside the range [{NumberText.Of(min)}, {NumberText.Of(max)}]"
             : null;
     }
-
-    private static string Format(double value) => value.ToString(CultureInfo.InvariantCulture);
 }

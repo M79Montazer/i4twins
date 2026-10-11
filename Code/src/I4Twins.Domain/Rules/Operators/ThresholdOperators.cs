@@ -1,8 +1,6 @@
-using System.Globalization;
 using I4Twins.Domain.Readings;
 
 namespace I4Twins.Domain.Rules.Operators;
-
 
 public abstract class ThresholdOperator(string name, string violationPhrase) : IStatelessRuleOperator
 {
@@ -19,13 +17,11 @@ public abstract class ThresholdOperator(string name, string violationPhrase) : I
     {
         var threshold = rule.Threshold!.Value;
         return Violates(reading.Value, threshold)
-            ? $"{reading.Metric} {Format(reading.Value)} is {violationPhrase} {Format(threshold)}"
+            ? $"{reading.Metric} {NumberText.Of(reading.Value)} is {violationPhrase} {NumberText.Of(threshold)}"
             : null;
     }
 
     protected abstract bool Violates(double value, double threshold);
-
-    private static string Format(double value) => value.ToString(CultureInfo.InvariantCulture);
 }
 
 public sealed class GreaterThanOperator() : ThresholdOperator("GreaterThan", "greater than")

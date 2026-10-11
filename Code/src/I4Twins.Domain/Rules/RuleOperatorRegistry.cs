@@ -43,4 +43,16 @@ public sealed class RuleOperatorRegistry
         ruleOperator = null;
         return false;
     }
+
+    public bool TryGetStateful(string name, [NotNullWhen(true)] out IStatefulRuleOperator? ruleOperator)
+    {
+        if (_operators.TryGetValue(name, out var registered) && registered is IStatefulRuleOperator stateful)
+        {
+            ruleOperator = stateful;
+            return true;
+        }
+
+        ruleOperator = null;
+        return false;
+    }
 }

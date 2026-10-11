@@ -4,7 +4,6 @@ namespace I4Twins.Application.Rules;
 
 public sealed record RuleSetLoadOutcome(RuleSet RuleSet, long RulesLoaded);
 
-
 public sealed class RuleSetService(IRuleSource source, IRuleParser parser, RuleOperatorRegistry operators)
 {
     public RuleSetLoadOutcome Load()

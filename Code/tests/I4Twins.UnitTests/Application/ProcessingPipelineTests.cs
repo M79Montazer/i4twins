@@ -54,7 +54,7 @@ public class ProcessingPipelineTests
     private static ProcessingPipeline Pipeline(ILineSource source, ILineParser parser, RawRule[] rules) => new(
         new RuleSetService(new StubRuleSource(), new StubRuleParser(rules), RuleOperatorRegistry.WithDefaultOperators()),
         new IngestionService(source, parser),
-        new RuleEvaluationService(new RuleEvaluator(RuleOperatorRegistry.WithDefaultOperators())));
+        new RuleEvaluationService(new RuleEvaluator(RuleOperatorRegistry.WithDefaultOperators()), RuleOperatorRegistry.WithDefaultOperators()));
 
     [Fact]
     public void InvalidAndDuplicateRecords_AreNeverEvaluated()
