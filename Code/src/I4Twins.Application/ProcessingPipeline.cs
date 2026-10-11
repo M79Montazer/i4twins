@@ -1,5 +1,6 @@
 using I4Twins.Application.Alerts;
 using I4Twins.Application.Ingestion;
+using I4Twins.Application.Persistence;
 using I4Twins.Application.Rules;
 using I4Twins.Domain.Rules;
 
@@ -13,9 +14,15 @@ public sealed record ProcessingOutcome(
     IReadOnlyList<RuleEpisode> Episodes,
     AlertCounterSnapshot Alerts,
     IReadOnlyList<Alert> RaisedAlerts,
-    IReadOnlyList<AlertDecision> AlertDecisions);
+    IReadOnlyList<AlertDecision> AlertDecisions,
+    PersistenceResult Persistence);
 
-public sealed class ProcessingPipeline(RuleSetService ruleSet, IngestionService ingestion, RuleEvaluationService evaluation, AlertService alerting)
+public sealed class ProcessingPipeline(
+    RuleSetService ruleSet,
+    IngestionService ingestion,
+    RuleEvaluationService evaluation,
+    AlertService alerting,
+    IProcessingStore store)
 {
     public ProcessingOutcome Run()
     {
@@ -23,6 +30,7 @@ public sealed class ProcessingPipeline(RuleSetService ruleSet, IngestionService 
         var ingested = ingestion.Run();
         var evaluated = evaluation.Evaluate(ingested.Readings, rules.RuleSet);
         var alerted = alerting.Evaluate(evaluated.Episodes);
+        var persisted = store.Persist(new ProcessingBatch(evaluated.Evaluations, evaluated.Episodes, alerted.Alerts));
         return new ProcessingOutcome(
             ingested.Counters,
             rules.RulesLoaded,
@@ -31,6 +39,7 @@ public sealed class ProcessingPipeline(RuleSetService ruleSet, IngestionService 
             evaluated.Episodes,
             alerted.Counters,
             alerted.Alerts,
-            alerted.Decisions);
+            alerted.Decisions,
+            persisted);
     }
 }

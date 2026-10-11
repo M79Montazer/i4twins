@@ -24,7 +24,7 @@ public sealed class RuleEvaluationService(RuleEvaluator evaluator, RuleOperatorR
         {
             var stateless = evaluator.Evaluate(ordered[i], rules);
             mutable[i].EvaluatedRules += stateless.EvaluatedRuleCount;
-            mutable[i].Violations.AddRange(stateless.Violations);
+            mutable[i].RuleResults.AddRange(stateless.RuleResults);
         }
 
         var episodes = new List<RuleEpisode>();
@@ -42,12 +42,11 @@ public sealed class RuleEvaluationService(RuleEvaluator evaluator, RuleOperatorR
                 episodes.AddRange(result.Episodes);
                 foreach (var reading in streamReadings)
                 {
-                    mutable[indexByReading[reading.Key]].EvaluatedRules++;
-                }
-
-                foreach (var (key, violation) in result.Violations)
-                {
-                    mutable[indexByReading[key]].Violations.Add(violation);
+                    var candidate = mutable[indexByReading[reading.Key]];
+                    candidate.EvaluatedRules++;
+                    candidate.RuleResults.Add(result.Violations.TryGetValue(reading.Key, out var violation)
+                        ? RuleResult.Violation(violation.RuleId, violation.RuleName, violation.Reason)
+                        : RuleResult.NotViolated(rule.Id, rule.Name));
                 }
             }
         }
@@ -73,9 +72,9 @@ public sealed class RuleEvaluationService(RuleEvaluator evaluator, RuleOperatorR
     {
         public SensorReading Reading { get; } = reading;
         public int EvaluatedRules { get; set; }
-        public List<RuleViolation> Violations { get; } = [];
+        public List<RuleResult> RuleResults { get; } = [];
 
         public ReadingEvaluation Build() =>
-            new(Reading, Acceptable: Violations.Count == 0, EvaluatedRules, Violations);
+            new(Reading, Acceptable: RuleResults.All(r => !r.Violated), EvaluatedRules, RuleResults);
     }
 }

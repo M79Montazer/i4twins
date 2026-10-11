@@ -2,6 +2,7 @@ using System.Globalization;
 using I4Twins.Application;
 using I4Twins.Application.Alerts;
 using I4Twins.Application.Ingestion;
+using I4Twins.Application.Persistence;
 using I4Twins.Application.Rules;
 using I4Twins.Domain.Readings;
 using I4Twins.Domain.Rules;
@@ -30,6 +31,17 @@ public class ProcessingPipelineTests
     private sealed class StubRuleParser(RawRule[] rules) : IRuleParser
     {
         public RuleDocumentParseResult Parse(string json) => new RuleDocumentParsed(rules);
+    }
+
+    private sealed class RecordingStore : IProcessingStore
+    {
+        public ProcessingBatch? LastBatch { get; private set; }
+
+        public PersistenceResult Persist(ProcessingBatch batch)
+        {
+            LastBatch = batch;
+            return new PersistenceResult(batch.Evaluations.Count, 0, 0, batch.RaisedAlerts.Count);
+        }
     }
 
     private static LineParseResult Parsed(string ts, double value, long seq, string deviceId = "PUMP-01") =>
@@ -64,11 +76,16 @@ public class ProcessingPipelineTests
         new RawField(RawFieldType.Missing),
         RawField.Of(durationSeconds));
 
-    private static ProcessingPipeline Pipeline(ILineSource source, ILineParser parser, RawRule[] rules) => new(
-        new RuleSetService(new StubRuleSource(), new StubRuleParser(rules), RuleOperatorRegistry.WithDefaultOperators()),
-        new IngestionService(source, parser),
-        new RuleEvaluationService(new RuleEvaluator(RuleOperatorRegistry.WithDefaultOperators()), RuleOperatorRegistry.WithDefaultOperators()),
-        new AlertService());
+    private static ProcessingPipeline Pipeline(ILineSource source, ILineParser parser, RawRule[] rules, out RecordingStore store)
+    {
+        store = new RecordingStore();
+        return new ProcessingPipeline(
+            new RuleSetService(new StubRuleSource(), new StubRuleParser(rules), RuleOperatorRegistry.WithDefaultOperators()),
+            new IngestionService(source, parser),
+            new RuleEvaluationService(new RuleEvaluator(RuleOperatorRegistry.WithDefaultOperators()), RuleOperatorRegistry.WithDefaultOperators()),
+            new AlertService(),
+            store);
+    }
 
     [Fact]
     public void InvalidAndDuplicateRecords_AreNeverEvaluated()
@@ -81,7 +98,7 @@ public class ProcessingPipelineTests
                 ("first", Parsed("2025-06-01T08:00:00Z", 100, seq: 1)),
                 ("duplicate", Parsed("2025-06-01T08:00:00Z", 999, seq: 1)),
                 ("good", Parsed("2025-06-01T08:00:02Z", 10, seq: 2))),
-            [GlobalThresholdRule(50)]);
+            [GlobalThresholdRule(50)], out _);
 
         var outcome = pipeline.Run();
 
@@ -112,7 +129,7 @@ public class ProcessingPipelineTests
         var pipeline = Pipeline(
             new StubSource([.. lines]),
             new StubParser([.. script]),
-            [SustainedRule(80, 30)]);
+            [SustainedRule(80, 30)], out var store);
 
         var outcome = pipeline.Run();
 
@@ -131,7 +148,7 @@ public class ProcessingPipelineTests
         var pipeline = Pipeline(
             new StubSource("first"),
             new StubParser(("first", Parsed("2025-06-01T08:00:00Z", 100, seq: 1))),
-            [GlobalThresholdRule(50) with { Operator = RawField.Of("NoSuchOperator") }]);
+            [GlobalThresholdRule(50) with { Operator = RawField.Of("NoSuchOperator") }], out _);
 
         Assert.Throws<RuleConfigurationException>(pipeline.Run);
     }

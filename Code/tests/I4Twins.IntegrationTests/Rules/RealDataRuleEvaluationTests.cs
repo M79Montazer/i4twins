@@ -41,7 +41,8 @@ public class RealDataRuleEvaluationTests(ITestOutputHelper output)
                 new FileLineSource(TestData.DataFile("readings.jsonl")),
                 new JsonLineParser()),
             new RuleEvaluationService(new RuleEvaluator(RuleOperatorRegistry.WithDefaultOperators()), RuleOperatorRegistry.WithDefaultOperators()),
-            new AlertService());
+            new AlertService(),
+            new NoopStore());
 
         var outcome = pipeline.Run();
         var ingestion = outcome.Ingestion;

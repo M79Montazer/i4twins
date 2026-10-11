@@ -6,7 +6,7 @@ public sealed class RuleEvaluator(RuleOperatorRegistry operators)
 {
     public ReadingEvaluation Evaluate(SensorReading reading, RuleSet rules)
     {
-        var violations = new List<RuleViolation>();
+        var results = new List<RuleResult>();
         var evaluatedRules = 0;
 
         foreach (var rule in rules.ApplicableRules(reading))
@@ -17,12 +17,11 @@ public sealed class RuleEvaluator(RuleOperatorRegistry operators)
             }
 
             evaluatedRules++;
-            if (stateless.EvaluateViolation(reading, rule) is { } reason)
-            {
-                violations.Add(new RuleViolation(rule.Id, rule.Name, reason));
-            }
+            results.Add(stateless.EvaluateViolation(reading, rule) is { } reason
+                ? RuleResult.Violation(rule.Id, rule.Name, reason)
+                : RuleResult.NotViolated(rule.Id, rule.Name));
         }
 
-        return new ReadingEvaluation(reading, Acceptable: violations.Count == 0, evaluatedRules, violations);
+        return new ReadingEvaluation(reading, Acceptable: results.All(r => !r.Violated), evaluatedRules, results);
     }
 }
