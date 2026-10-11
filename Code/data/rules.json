@@ -1,0 +1,29 @@
+[
+  {
+    "id": "R1",
+    "name": "High Temperature",
+    "metric": "temperature",
+    "operator": "GreaterThan",
+    "threshold": 72,
+    "enabled": true
+  },
+  {
+    "id": "R2",
+    "name": "PUMP-01 Overheating Sustained",
+    "deviceId": "PUMP-01",
+    "metric": "temperature",
+    "operator": "SustainedAbove",
+    "threshold": 69,
+    "durationSeconds": 30,
+    "enabled": true
+  },
+  {
+    "id": "R3",
+    "name": "Vibration Within Range",
+    "metric": "vibration",
+    "operator": "Between",
+    "min": 0,
+    "max": 7,
+    "enabled": true
+  }
+]
