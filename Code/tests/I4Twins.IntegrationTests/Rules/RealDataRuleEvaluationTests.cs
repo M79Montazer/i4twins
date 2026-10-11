@@ -1,4 +1,5 @@
 using I4Twins.Application;
+using I4Twins.Application.Alerts;
 using I4Twins.Application.Ingestion;
 using I4Twins.Application.Rules;
 using I4Twins.Domain.Rules;
@@ -39,7 +40,8 @@ public class RealDataRuleEvaluationTests(ITestOutputHelper output)
             new IngestionService(
                 new FileLineSource(TestData.DataFile("readings.jsonl")),
                 new JsonLineParser()),
-            new RuleEvaluationService(new RuleEvaluator(RuleOperatorRegistry.WithDefaultOperators()), RuleOperatorRegistry.WithDefaultOperators()));
+            new RuleEvaluationService(new RuleEvaluator(RuleOperatorRegistry.WithDefaultOperators()), RuleOperatorRegistry.WithDefaultOperators()),
+            new AlertService());
 
         var outcome = pipeline.Run();
         var ingestion = outcome.Ingestion;
@@ -63,6 +65,16 @@ public class RealDataRuleEvaluationTests(ITestOutputHelper output)
             output.WriteLine($"  e.g. {episode.RuleId}/{episode.DeviceId}/{episode.Metric}: {episode.StartTs:u} -> {episode.EndTs:u}, peak {episode.PeakValue}, qualifies: {episode.Qualifies}");
         }
 
+        output.WriteLine($"Alerts raised:             {outcome.Alerts.AlertsRaised} (suppressed: {outcome.Alerts.AlertsSuppressed})");
+        foreach (var alert in outcome.RaisedAlerts)
+        {
+            output.WriteLine($"  raised {alert.RuleId}/{alert.DeviceId}/{alert.Metric}: {alert.StartTs:u} -> {alert.EndTs:u}, peak {alert.PeakValue}");
+        }
+        foreach (var decision in outcome.AlertDecisions.Where(d => !d.Raised))
+        {
+            output.WriteLine($"  suppressed {decision.Episode.RuleId}: starts {decision.Episode.StartTs:u}, previous alert ended {decision.PreviousAlertEndTs:u}");
+        }
+
         Assert.Equal(ingestion.StoredReadings, outcome.Evaluations.Count);
         Assert.Equal(ingestion.StoredReadings, evaluation.AcceptableReadings + evaluation.UnacceptableReadings);
         Assert.Equal(outcome.Evaluations.Sum(e => e.EvaluatedRuleCount), evaluation.EvaluationsPerformed);
@@ -82,5 +94,15 @@ public class RealDataRuleEvaluationTests(ITestOutputHelper output)
         Assert.Equal(1942, evaluation.AcceptableReadings);
         Assert.Equal(161, evaluation.UnacceptableReadings);
         Assert.Equal(161, evaluation.RuleViolations);
+
+        Assert.Equal(2, outcome.Alerts.QualifyingEpisodes);
+        Assert.Equal(1, outcome.Alerts.AlertsRaised);
+        Assert.Equal(1, outcome.Alerts.AlertsSuppressed);
+        var raisedAlert = Assert.Single(outcome.RaisedAlerts);
+        Assert.Equal("R2", raisedAlert.RuleId);
+        Assert.Equal("PUMP-01", raisedAlert.DeviceId);
+        Assert.Equal("temperature", raisedAlert.Metric);
+        Assert.Equal(70.112, raisedAlert.PeakValue, precision: 3);
+        Assert.Contains(outcome.AlertDecisions, d => !d.Raised && d.Episode.Qualifies);
     }
 }

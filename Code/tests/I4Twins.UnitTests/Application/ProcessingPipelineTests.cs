@@ -1,5 +1,6 @@
 using System.Globalization;
 using I4Twins.Application;
+using I4Twins.Application.Alerts;
 using I4Twins.Application.Ingestion;
 using I4Twins.Application.Rules;
 using I4Twins.Domain.Readings;
@@ -51,10 +52,23 @@ public class ProcessingPipelineTests
         new RawField(RawFieldType.Missing),
         new RawField(RawFieldType.Missing));
 
+    private static RawRule SustainedRule(double threshold, double durationSeconds) => new(
+        RawField.Of("R2"),
+        RawField.Of("sustained overheating"),
+        RawField.Of(true),
+        RawField.Of("temperature"),
+        new RawField(RawFieldType.Missing),
+        RawField.Of("SustainedAbove"),
+        RawField.Of(threshold),
+        new RawField(RawFieldType.Missing),
+        new RawField(RawFieldType.Missing),
+        RawField.Of(durationSeconds));
+
     private static ProcessingPipeline Pipeline(ILineSource source, ILineParser parser, RawRule[] rules) => new(
         new RuleSetService(new StubRuleSource(), new StubRuleParser(rules), RuleOperatorRegistry.WithDefaultOperators()),
         new IngestionService(source, parser),
-        new RuleEvaluationService(new RuleEvaluator(RuleOperatorRegistry.WithDefaultOperators()), RuleOperatorRegistry.WithDefaultOperators()));
+        new RuleEvaluationService(new RuleEvaluator(RuleOperatorRegistry.WithDefaultOperators()), RuleOperatorRegistry.WithDefaultOperators()),
+        new AlertService());
 
     [Fact]
     public void InvalidAndDuplicateRecords_AreNeverEvaluated()
@@ -81,6 +95,34 @@ public class ProcessingPipelineTests
         Assert.Equal(1, outcome.Evaluation.AcceptableReadings);
         Assert.Equal(outcome.Ingestion.StoredReadings,
             outcome.Evaluation.AcceptableReadings + outcome.Evaluation.UnacceptableReadings);
+    }
+
+    [Fact]
+    public void ManyReadingsInOneSustainedEpisode_ProduceExactlyOneAlert()
+    {
+        var lines = new List<string>();
+        var script = new List<(string, LineParseResult)>();
+        for (var i = 0; i < 10; i++)
+        {
+            var ts = $"2025-06-01T08:{i * 10 / 60:00}:{i * 10 % 60:00}Z";
+            lines.Add($"reading-{i}");
+            script.Add(($"reading-{i}", Parsed(ts, 85, seq: i + 1)));
+        }
+
+        var pipeline = Pipeline(
+            new StubSource([.. lines]),
+            new StubParser([.. script]),
+            [SustainedRule(80, 30)]);
+
+        var outcome = pipeline.Run();
+
+        Assert.Single(outcome.RaisedAlerts);
+        Assert.Equal(1, outcome.Alerts.AlertsRaised);
+        Assert.Equal(10, outcome.Evaluation.UnacceptableReadings);
+        var alert = outcome.RaisedAlerts[0];
+        Assert.Equal("2025-06-01T08:00:00Z", alert.StartTs.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"));
+        Assert.Equal("2025-06-01T08:01:30Z", alert.EndTs.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"));
+        Assert.Equal(85, alert.PeakValue);
     }
 
     [Fact]

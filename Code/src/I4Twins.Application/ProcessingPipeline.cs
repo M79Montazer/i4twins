@@ -1,3 +1,4 @@
+using I4Twins.Application.Alerts;
 using I4Twins.Application.Ingestion;
 using I4Twins.Application.Rules;
 using I4Twins.Domain.Rules;
@@ -9,15 +10,27 @@ public sealed record ProcessingOutcome(
     long RulesLoaded,
     RuleEvaluationCounterSnapshot Evaluation,
     IReadOnlyList<ReadingEvaluation> Evaluations,
-    IReadOnlyList<RuleEpisode> Episodes);
+    IReadOnlyList<RuleEpisode> Episodes,
+    AlertCounterSnapshot Alerts,
+    IReadOnlyList<Alert> RaisedAlerts,
+    IReadOnlyList<AlertDecision> AlertDecisions);
 
-public sealed class ProcessingPipeline(RuleSetService ruleSet, IngestionService ingestion, RuleEvaluationService evaluation)
+public sealed class ProcessingPipeline(RuleSetService ruleSet, IngestionService ingestion, RuleEvaluationService evaluation, AlertService alerting)
 {
     public ProcessingOutcome Run()
     {
         var rules = ruleSet.Load();
         var ingested = ingestion.Run();
         var evaluated = evaluation.Evaluate(ingested.Readings, rules.RuleSet);
-        return new ProcessingOutcome(ingested.Counters, rules.RulesLoaded, evaluated.Counters, evaluated.Evaluations, evaluated.Episodes);
+        var alerted = alerting.Evaluate(evaluated.Episodes);
+        return new ProcessingOutcome(
+            ingested.Counters,
+            rules.RulesLoaded,
+            evaluated.Counters,
+            evaluated.Evaluations,
+            evaluated.Episodes,
+            alerted.Counters,
+            alerted.Alerts,
+            alerted.Decisions);
     }
 }
