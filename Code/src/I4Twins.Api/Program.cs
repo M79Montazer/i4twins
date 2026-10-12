@@ -1,11 +1,35 @@
 using System.Globalization;
+using I4Twins.Application;
 using I4Twins.Application.Aggregation;
+using I4Twins.Application.Alerts;
+using I4Twins.Application.Ingestion;
+using I4Twins.Application.Persistence;
+using I4Twins.Application.Rules;
+using I4Twins.Domain.Rules;
 using I4Twins.Infrastructure;
+using I4Twins.Infrastructure.Input;
+using I4Twins.Infrastructure.Logging;
 using I4Twins.Infrastructure.Persistence;
+using I4Twins.Infrastructure.Rules;
 
 var builder = WebApplication.CreateBuilder(args);
 
 var databasePath = builder.Configuration["Database:Path"] ?? DefaultPaths.UnderSolutionData("i4twins.db");
+var readingsPath = builder.Configuration["Processing:ReadingsPath"] ?? DefaultPaths.UnderSolutionData("readings.jsonl");
+var rulesPath = builder.Configuration["Processing:RulesPath"] ?? DefaultPaths.UnderSolutionData("rules.json");
+
+IProcessingLog log = new ConsoleProcessingLog();
+var registry = RuleOperatorRegistry.WithDefaultOperators();
+var pipeline = new ProcessingPipeline(
+    new RuleSetService(new FileRuleSource(rulesPath), new JsonRuleParser(), registry),
+    new IngestionService(new FileLineSource(readingsPath), new JsonLineParser(), log),
+    new RuleEvaluationService(new RuleEvaluator(registry), registry, log),
+    new AlertService(new CooldownPolicy(), log),
+    new SqliteProcessingStore(databasePath),
+    log);
+var outcome = pipeline.Run();
+Console.WriteLine(ProcessingReport.Format(outcome));
+
 builder.Services.AddSingleton<IAcceptableReadingSource>(new SqliteAggregationSource(databasePath));
 builder.Services.AddSingleton<AggregationService>();
 

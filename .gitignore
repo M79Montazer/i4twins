@@ -377,3 +377,6 @@ export_credentials.cfg
 # Imported translations (automatically generated from CSV files)
 *.translation
 
+
+# i4Twins runtime SQLite database
+Code/data/*.db

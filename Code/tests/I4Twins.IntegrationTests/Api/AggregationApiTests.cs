@@ -149,7 +149,12 @@ public class AggregationApiTests
         pipeline.Run();
 
         var factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder => builder.UseSetting("Database:Path", databasePath));
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseSetting("Database:Path", databasePath);
+                builder.UseSetting("Processing:ReadingsPath", readingsPath);
+                builder.UseSetting("Processing:RulesPath", rulesPath);
+            });
         return new ApiSetup(factory, tempDir);
     }
 
